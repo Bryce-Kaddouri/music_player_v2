@@ -1,15 +1,18 @@
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 import 'package:form_builder_validators/form_builder_validators.dart';
 
 import 'package:form_builder_file_picker/form_builder_file_picker.dart';
+import 'package:my_test_provider/providers/audio_files_provider.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/upload_provider.dart';
 
 class UploadPage extends StatefulWidget {
-  const UploadPage({super.key});
+  String? idFile;
+  UploadPage({super.key, this.idFile});
 
   @override
   State<UploadPage> createState() => _UploadPageState();
@@ -19,12 +22,46 @@ class _UploadPageState extends State<UploadPage> {
   final _formKeyFile = GlobalKey<FormBuilderState>();
   // global key for the form
   TextEditingController _titleController = TextEditingController();
+  String _appBarTitle = '';
+  PlatformFile? oldFile;
+
+  void getTitle(String id, BuildContext context) async {
+    if (context.mounted) {
+      String? title =
+          await context.read<AudioProvider>().getTitleById(widget.idFile!);
+      if (title != null) {
+        _titleController.text = title;
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    if (widget.idFile != null) {
+      _appBarTitle = 'Update';
+      getTitle(widget.idFile!, context);
+
+      print('idFile : ${widget.idFile}');
+    } else {
+      _appBarTitle = 'Upload';
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _titleController.dispose();
+    _formKeyFile.currentState?.dispose();
+    oldFile = null;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Upload Page'),
+        title: Text(_appBarTitle),
       ),
       body: SingleChildScrollView(
         child: Container(
@@ -54,27 +91,94 @@ class _UploadPageState extends State<UploadPage> {
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 20),
-                FormBuilderFilePicker(
-                  name: 'file_picker',
-                  decoration: const InputDecoration(
-                    labelText: 'File Picker',
-                    border: OutlineInputBorder(),
-                    errorStyle: TextStyle(color: Colors.redAccent),
-                  ),
-                  typeSelectors: [
-                    TypeSelector(
-                        type: FileType.audio,
+                if (widget.idFile == null)
+                  FormBuilderFilePicker(
+                    name: 'file_picker',
+                    decoration: const InputDecoration(
+                      labelText: 'File Picker',
+                      border: OutlineInputBorder(),
+                      errorStyle: TextStyle(color: Colors.redAccent),
+                    ),
+                    typeSelectors: [
+                      TypeSelector(
+                        type: FileType.custom,
                         selector: Container(
                           child: const Icon(Icons.add_circle_outline),
-                        )),
-                  ],
-                  maxFiles: 1,
-                  previewImages: true,
-                  onChanged: (val) => print(val),
-                  onFileLoading: (val) {
-                    print(val);
-                  },
-                ),
+                        ),
+                      ),
+                    ],
+                    maxFiles: 1,
+                    previewImages: true,
+                    onChanged: (val) => print(val),
+                    onFileLoading: (val) {
+                      print(val);
+                    },
+                    allowedExtensions: ['mp3'],
+                  ),
+                if (widget.idFile != null)
+                  StreamBuilder(
+                    stream: context
+                        .read<UploadProvider>()
+                        .getFile(widget.idFile!)
+                        .snapshotEvents,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        print('snapshot.data : ${snapshot.data}');
+                        TaskSnapshot taskSnapshot =
+                            snapshot.data as TaskSnapshot;
+                        if (taskSnapshot.state == TaskState.success) {
+                          oldFile = PlatformFile(
+                            path:
+                                '/data/user/0/com.example.my_test_provider/cache/file_picker/${widget.idFile}.mp3',
+                            name: '${widget.idFile}.mp3',
+                            size: taskSnapshot.totalBytes,
+                          );
+                          return FormBuilderFilePicker(
+                            name: 'file_picker',
+                            decoration: const InputDecoration(
+                              labelText: 'File Picker',
+                              border: OutlineInputBorder(),
+                              errorStyle: TextStyle(color: Colors.redAccent),
+                            ),
+                            initialValue: [
+                              PlatformFile(
+                                path:
+                                    '/data/user/0/com.example.my_test_provider/cache/file_picker/${widget.idFile}.mp3',
+                                name: '${widget.idFile}.mp3',
+                                size: taskSnapshot.totalBytes,
+                              )
+                            ],
+                            typeSelectors: [
+                              TypeSelector(
+                                type: FileType.custom,
+                                selector: Container(
+                                  child: const Icon(Icons.add_circle_outline),
+                                ),
+                              ),
+                            ],
+                            maxFiles: 1,
+                            previewImages: true,
+                            onChanged: (val) => print(val),
+                            onFileLoading: (val) {
+                              print(val);
+                            },
+                            allowedExtensions: ['mp3'],
+                          );
+                        } else {
+                          print('taskSnapshot.state : ${taskSnapshot.state}');
+                          double progress = taskSnapshot.bytesTransferred /
+                              taskSnapshot.totalBytes;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: progress,
+                            ),
+                          );
+                        }
+                      } else {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    },
+                  ),
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () {
@@ -82,43 +186,28 @@ class _UploadPageState extends State<UploadPage> {
                       print(_formKeyFile.currentState!.value);
                       PlatformFile file =
                           _formKeyFile.currentState!.value['file_picker'][0];
-                      print(file.name);
-                      print(file.size);
-                      print(file.extension);
-                      print(file.path);
+                      print('file : ${file.bytes}');
+                      bool isFileUpdated = identical(file, oldFile);
+                      print('file : ${file}');
+                      print('oldFile : ${oldFile}');
+                      print('isFileUpdated : $isFileUpdated');
 
-                      context.read<UploadProvider>().uploadFile(
-                            file.path!,
-                            _formKeyFile.currentState!.value['titre'],
-                          );
+                      if (widget.idFile != null) {
+                        // check if file is updated
+
+                        /*context.read<UploadProvider>().updateFile(
+                              file.path!,
+                              _formKeyFile.currentState!.value['titre'],
+                              widget.idFile!,
+                            );*/
+                      } else {
+                        context.read<UploadProvider>().uploadFile(
+                              file.path!,
+                              _formKeyFile.currentState!.value['titre'],
+                            );
+                      }
 
                       Navigator.pop(context);
-
-                      /*Stream<TaskSnapshot> task = uploadProvider.uploadFile(
-                        _formKeyFile.currentState!.value['file_picker'][0],
-                        _formKeyFile.currentState!.value['titre'],
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: StreamBuilder<TaskSnapshot>(
-                            stream: task,
-                            builder: (BuildContext context,
-                                AsyncSnapshot<TaskSnapshot> snapshot) {
-                              if (snapshot.hasData) {
-                                final TaskSnapshot? taskSnapshot =
-                                    snapshot.data;
-                                final double progress =
-                                    taskSnapshot!.bytesTransferred.toDouble() /
-                                        taskSnapshot.totalBytes.toDouble();
-                                return LinearProgressIndicator(value: progress);
-                              } else {
-                                return const Text('Starting...');
-                              }
-                            },
-                          ),
-                        ),
-                      );
-                      Navigator.pop(context);*/
                     } else {
                       print(_formKeyFile.currentState!.value);
                       print('validation failed');

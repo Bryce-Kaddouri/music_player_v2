@@ -1,17 +1,17 @@
 // lib/providers/upload_provider.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:my_test_provider/models/audio_file.dart';
-import '/services/firebase_storage_service.dart';
-import 'dart:io';
 
 class AudioProvider with ChangeNotifier {
   final _firestore = FirebaseFirestore.instance;
 
   final Player _player = Player();
   Player get player => _player;
+
+  /* String _currentTitle = '';
+  String get currentTitle => _currentTitle;*/
 
   bool _isPlaying = false;
   bool get isPlaying => _isPlaying;
@@ -21,8 +21,8 @@ class AudioProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  bool _isOpenPlaylist = false;
-  bool get isOpenPlaylist => _isOpenPlaylist;
+  bool? _isOpenPlaylist;
+  bool? get isOpenPlaylist => _isOpenPlaylist;
 
   void setIsOpenPlaylist(bool isOpenPlaylist) {
     _isOpenPlaylist = isOpenPlaylist;
@@ -43,17 +43,27 @@ class AudioProvider with ChangeNotifier {
 
   void openPlaylist() async {
     try {
-      final snapshot = _firestore.collection('audio').snapshots();
+      final snapshot = _firestore
+          .collection('audio')
+          .orderBy('createdAt', descending: true)
+          .snapshots();
       snapshot.listen((event) async {
-        final datas = event.docs.map((e) => e.data()).toList();
+        final datas = event.docs.map((e) => e).toList();
+        print('datas : ${datas.first.id}');
 
         Playlist _playlist = Playlist(datas
-            .map((data) => Media(data['downloadUrl'], extras: {
-                  'title': data['title'],
-                  'createdAt': data['createdAt'],
-                }))
+            .map(
+              (data) => Media(
+                data.data()['downloadUrl'],
+                extras: {
+                  'id': data.id, // 'id' is not used in this example
+                  'title': data.data()['title'],
+                  'createdAt': data.data()['createdAt'],
+                },
+              ),
+            )
             .toList());
-        if (_isOpenPlaylist == false) {
+        if (_isOpenPlaylist == null || _isOpenPlaylist == false) {
           await _player.open(
             _playlist,
             play: false,
@@ -68,8 +78,9 @@ class AudioProvider with ChangeNotifier {
           Media media = Media(event.docs.last.data()['downloadUrl'], extras: {
             'title': event.docs.last.data()['title'],
             'createdAt': event.docs.last.data()['createdAt'],
+            'id': event.docs.last.id,
           });
-          await _player.add(media);
+          print('media : $media');
           notifyListeners();
         }
       });
@@ -109,5 +120,25 @@ class AudioProvider with ChangeNotifier {
     } catch (e) {
       print(e);
     }
+  }
+
+  Future<String?> getTitleById(String id) async {
+    try {
+      final snapshot = await _firestore.collection('audio').doc(id).get();
+      return snapshot.data()!['title'];
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  void addAudioToPlaylist(String id) async {
+    final newAudio = await _firestore.collection('audio').doc(id).get();
+    Media media = Media(newAudio.data()!['downloadUrl'], extras: {
+      'title': newAudio.data()!['title'],
+      'createdAt': newAudio.data()!['createdAt'],
+      'id': newAudio.id,
+    });
+    await _player.add(media);
+    notifyListeners();
   }
 }

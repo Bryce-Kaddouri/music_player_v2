@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:my_test_provider/models/audio_file.dart';
 import 'package:my_test_provider/providers/audio_files_provider.dart';
+import 'package:my_test_provider/providers/permission_provider.dart';
 import 'package:my_test_provider/views/upload_page.dart';
 import 'package:provider/provider.dart';
 
@@ -17,15 +18,14 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   void open() async {
     print('open');
-    context.read<AudioProvider>().openPlaylist();
+    if (context.mounted) {
+      context.read<AudioProvider>().openPlaylist();
+    }
   }
 
   @override
   void initState() {
     open();
-/*
-    context.read<AudioProvider>().openPlaylist();
-*/
   }
 
   @override
@@ -38,7 +38,7 @@ class _HomePageState extends State<HomePage> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const UploadPage()),
+                MaterialPageRoute(builder: (context) => UploadPage()),
               );
             },
             icon: const Icon(Icons.add_circle_outline),
@@ -97,11 +97,51 @@ class _HomePageState extends State<HomePage> {
                                 },
                                 title: Text(
                                     '${snapshot.data?.medias[index].extras!['title']}'),
-                                trailing: IconButton(
-                                    icon: const Icon(Icons.play_arrow),
-                                    onPressed: () {
-                                      print('play audio $index');
-                                    }),
+                                trailing: PopupMenuButton(
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem(
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit, color: Colors.blue),
+                                          Text('Edit'),
+                                        ],
+                                      ),
+                                      value: {
+                                        'edit': snapshot
+                                            .data?.medias[index].extras!['id'],
+                                      },
+                                    ),
+                                    PopupMenuItem(
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete, color: Colors.red),
+                                          Text('Delete'),
+                                        ],
+                                      ),
+                                      value: {
+                                        'delete': snapshot
+                                            .data?.medias[index].extras!['id'],
+                                      },
+                                    ),
+                                  ],
+                                  onSelected: (value) {
+                                    if (value.keys.first == 'edit') {
+                                      print('edit');
+                                      print(value.values);
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => UploadPage(
+                                            idFile: value.values.first,
+                                          ),
+                                        ),
+                                      );
+                                    } else if (value.keys.first == 'delete') {
+                                      print('delete');
+                                      print(value.values);
+                                    }
+                                  },
+                                ),
                               );
                             },
                           );
@@ -209,7 +249,8 @@ class _HomePageState extends State<HomePage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              onPressed: () {
+                              onPressed: () async {
+                                print('previous');
                                 context.read<AudioProvider>().previous();
                               },
                               icon: const Icon(Icons.skip_previous),
@@ -223,6 +264,7 @@ class _HomePageState extends State<HomePage> {
                                   context.read<AudioProvider>().openPlaylist();
                                 }
                                 context.read<AudioProvider>().play();
+                                print('play');
                               },
                               icon: context.watch<AudioProvider>().isPlaying
                                   ? Icon(Icons.pause)
@@ -230,6 +272,7 @@ class _HomePageState extends State<HomePage> {
                             ),
                             IconButton(
                               onPressed: () {
+                                print('next');
                                 context.read<AudioProvider>().next();
                               },
                               icon: const Icon(Icons.skip_next),
@@ -237,6 +280,7 @@ class _HomePageState extends State<HomePage> {
                             // button to give a rating to the music (from 0 to 5 stars)
                             IconButton(
                               onPressed: () {
+                                print('rating');
                                 context.read<AudioProvider>().next();
                               },
                               icon: const Icon(Icons.star),
